@@ -1,0 +1,180 @@
+# Ch. 2: Observe everything - iii
+
+[Linkly](/docs/tutorials/linkly/overview)
+
+# Ch. 2: Observe everything
+
+Copy page
+
+Watch Linkly run live in the iii console, then read the same logs and traces from the engine.
+
+Copy page
+
+Observability in iii isn’t something you bolt onto each service. Every cross-worker call already flows through the engine, so the engine can trace and log the whole system end to end. In this chapter you open the console to see that, then, if you want, read the same data directly from the engine.
+
+##
+
+[​
+
+](#open-the-console)
+
+Open the console
+
+The engine has been running since Chapter 1. Start the console, a browser UI for inspecting it:
+
+```
+iii console
+```
+
+Open it at [http://127.0.0.1:3113](http://127.0.0.1:3113). Every worker you added is listed with the functions and triggers it registered. Navigate to the traces tab and run the below command to watch the invocations stream live:
+
+```
+curl -s -X POST http://127.0.0.1:3111/links \
+  -H 'Content-Type: application/json' -d '{"url":"https://iii.dev","code":"iii"}'
+for n in $(seq 1 5); do curl -s -o /dev/null http://127.0.0.1:3111/s/iii; done
+```
+
+Click any redirect to see a full waterfall of timed spans crossing from `iii-http` into `link` and back: ![iii console Traces page showing redirect spans sorted by duration with the waterfall for a selected GET /s/:code trace](https://mintcdn.com/motiadev/BtSyYarvZILm9XZb/next/tutorials/linkly/console-traces.png?fit=max&auto=format&n=BtSyYarvZILm9XZb&q=85&s=21e2b8a90549d079051001124f8a01fb) You didn’t add a tracing library or thread a request ID between services to get this. `iii project init` added the `iii-observability` worker to `config.yaml`, and from then on every request gets a trace and every `Logger` line is collected automatically, across workers. That is the point worth pausing on: in iii, end-to-end observability is a property of the system, not a per-service add-on.
+
+**iii-observability emits OpenTelemetry.** Its traces, metrics, and logs are emitted as OTel, so you aren’t locked into the console. Point the worker at Honeycomb, Grafana, Datadog, or any other OTel-compatible backend and your iii traces flow straight in. See the worker’s configuration on [workers.iii.dev/workers/iii-observability](https://workers.iii.dev/workers/iii-observability).
+
+For most teams the console (or your own OTel backend) is all you need day to day. The rest of this chapter is an optional deep dive: reading the same logs and traces directly from the engine, which is how you’d wire observability into scripts, CI, or an agent.
+
+##
+
+[​
+
+](#log-the-resolve)
+
+Log the resolve
+
+`link::create` already logs. Add a matching line to `link::resolve` so every lookup is recorded. Edit `link/src/index.ts`:
+
+src/index.ts
+
+```
+worker.registerFunction("link::resolve", async (payload: { code: string }) => {
+  const stored = await worker.trigger<{ scope: string; key: string }, { url: string } | null>({
+    function_id: "state::get",
+    payload: { scope: "links", key: payload.code },
+  });
+  logger.info("link resolved", { code: payload.code, found: !!stored?.url });
+  return { url: stored?.url ?? null };
+});
+```
+
+Save the file, then drive some traffic:
+
+```
+curl -s -X POST http://127.0.0.1:3111/links \
+  -H 'Content-Type: application/json' -d '{"url":"https://iii.dev","code":"iii"}'
+for n in $(seq 1 5); do curl -s -o /dev/null http://127.0.0.1:3111/s/iii; done
+curl -s -o /dev/null http://127.0.0.1:3111/s/missing
+```
+
+##
+
+[​
+
+](#read-the-logs)
+
+Read the logs
+
+```
+iii trigger engine::logs::list limit=100 \
+  | jq '.logs[]
+      | select(.body == "link resolved")
+      | { body,
+          data: (.attributes | with_entries(select(.key | IN("trace_id","span_id","service.name") | not))),
+          trace_id,
+          service_name }'
+```
+
+The `jq` pipe filters the response down to the `link resolved` entries and keeps the parts that matter for this tutorial, try removing it to see all the information the iii engine can provide.
+
+```
+{
+  "body": "link resolved",
+  "data": { "code": "iii", "found": true },
+  "trace_id": "6b20e1fe001742c25bb7dc570b57fe42",
+  "service_name": "iii-node"
+}
+```
+
+`data` is exactly what you passed to `logger.info`; the engine stores those fields as individual log attributes, so the `jq` above gathers everything except the OTel metadata keys. The `trace_id` ties the log to the trace it came from, which is where you look next.
+
+##
+
+[​
+
+](#follow-a-redirect-across-workers)
+
+Follow a redirect across workers
+
+Every request is also a trace. Grab the most recent redirect:
+
+```
+iii trigger engine::traces::list name="GET /s/:code" limit=1
+```
+
+Take the `trace_id` from the result and walk the whole request as a tree:
+
+```
+iii trigger engine::traces::tree trace_id=<trace_id> | jq -r '
+  def walk(depth):
+    ("  " * depth // "") + .name + " (" + .service_name + ") "
+      + (((.end_time_unix_nano - .start_time_unix_nano) / 1e6 * 1000 | round) / 1000 | tostring) + " ms",
+    (.children[]? | walk(depth + 1));
+  .roots[] | walk(0)
+'
+```
+
+The `jq` pipe walks the nested `roots` tree, indenting each span by depth and printing its `service_name` and duration in milliseconds. You get the full path of one redirect, across two workers:
+
+```
+GET /s/:code (iii) 2.32 ms
+  call http::redirect (iii) 2.228 ms
+    call http::redirect (iii-node) 1.335 ms
+      handle_invocation link::resolve (iii) 0.624 ms
+        call link::resolve (iii) 0.582 ms
+          call link::resolve (iii-node) 0.174 ms
+```
+
+That is the redirect arriving through `iii-http`, calling `http::redirect` in `link`, which calls `link::resolve` back through the engine. The per-span timing shows where the request spends its time: the view you reach for when a link feels slow.
+
+Worker spans export on a short delay, so a brand-new request’s trace can look truncated for a second or two. Give it a moment, or read a slightly older trace.
+
+##
+
+[​
+
+](#find-the-slowest-links)
+
+Find the slowest links
+
+To compare many requests, list the redirect spans sorted by duration, slowest first:
+
+```
+iii trigger engine::traces::list name="GET /s/:code" sort_by=duration_ms sort_order=desc limit=10 | jq -c '[.spans[] |
+  ((.end_time_unix_nano - .start_time_unix_nano) / 1e6 * 1000 | round / 1000)]'
+```
+
+The slowest redirects rise to the top; open any one’s `trace_id` with `engine::traces::tree` to see which hop is responsible.
+
+##
+
+[​
+
+](#conclusion)
+
+Conclusion
+
+Linkly is now observable: the console shows every worker, trace, and log as it happens, and you can read the same data from the engine with `iii trigger`. The links are still kept only in memory, though, so restarting the engine clears them. Next, in [Ch. 3: Persist everything](/docs/tutorials/linkly/persistence), you move them into durable storage.
+
+Was this page helpful?
+
+YesNo
+
+[Ch. 1: Foundations](/docs/tutorials/linkly/foundations)[Ch. 3: Persist everything](/docs/tutorials/linkly/persistence)
+
+⌘I
