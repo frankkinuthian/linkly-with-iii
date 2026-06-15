@@ -208,6 +208,13 @@ worker.registerFunction(
         params: [payload.code, payload.clicked_at],
       },
     });
+
+    worker.trigger({
+      function_id: "publish",
+      payload: { topic: "link.clicked", data: payload },
+      action: TriggerAction.Void(),
+    });
+
     return { recorded: true };
   },
 );

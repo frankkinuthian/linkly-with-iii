@@ -64,3 +64,14 @@ workers:
         name: local
   - name: analytics
     worker_path: /Users/frank/Desktop/builds/three-eye-framework/linkly/analytics
+  - name: iii-stream
+    config:
+      port: 3112
+      host: 127.0.0.1
+      adapter:
+        name: kv
+        config:
+          store_method: file_based
+          file_path: ./data/stream_store
+  - name: click-streamer
+    worker_path: /Users/frank/Desktop/builds/three-eye-framework/linkly/click-streamer

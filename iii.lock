@@ -46,3 +46,7 @@ workers:
     version: 0.19.2
     type: engine
     dependencies: {}
+  iii-stream:
+    version: 0.19.3
+    type: engine
+    dependencies: {}
