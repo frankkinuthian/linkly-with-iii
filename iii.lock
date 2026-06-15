@@ -50,3 +50,7 @@ workers:
     version: 0.19.3
     type: engine
     dependencies: {}
+  iii-worker-manager:
+    version: 0.19.3
+    type: engine
+    dependencies: {}

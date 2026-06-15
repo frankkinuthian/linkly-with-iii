@@ -219,6 +219,62 @@ worker.registerFunction(
   },
 );
 
+// ---------------------------------------------------------------------------
+// link::delete — remove a link from DB and cache
+// ---------------------------------------------------------------------------
+// Hard-deletes the link from both the durable store (SQLite) and the hot
+// cache (iii-state). Callers that need user confirmation should go through
+// link::request_delete instead of calling this directly.
+worker.registerFunction("link::delete", async (payload: { code: string }) => {
+  await worker.trigger({
+    function_id: "database::execute",
+    payload: {
+      db: DB,
+      sql: "DELETE FROM links WHERE code = ?",
+      params: [payload.code],
+    },
+  });
+
+  await worker.trigger({
+    function_id: "state::delete",
+    payload: { scope: "links", key: payload.code },
+  });
+
+  logger.info("link deleted", { code: payload.code });
+  return { deleted: true };
+});
+
+// ---------------------------------------------------------------------------
+// link::request_delete — server-initiated delete with browser confirmation
+// ---------------------------------------------------------------------------
+// Triggers a browser-registered function (user::confirm_destructive_op) to
+// ask the connected user for confirmation before proceeding. This is the same
+// worker.trigger primitive used between server workers — just aimed at a
+// function registered by the browser SDK. If the browser denies, the link
+// stays untouched.
+worker.registerFunction(
+  "link::request_delete",
+  async (payload: { code: string }) => {
+    const { confirmed } = await worker.trigger<
+      { code: string; action: string },
+      { confirmed: boolean }
+    >({
+      function_id: "user::confirm_destructive_op",
+      payload: { code: payload.code, action: `delete link "${payload.code}"` },
+    });
+
+    if (!confirmed) {
+      return { deleted: false };
+    }
+
+    await worker.trigger({
+      function_id: "link::delete",
+      payload: { code: payload.code },
+    });
+    return { deleted: true };
+  },
+);
+
 // ===========================================================================
 // 5. REACTIVE STATE: CACHE REFRESH VIA DURABLE SUBSCRIBER
 // ===========================================================================
