@@ -112,6 +112,8 @@ worker.registerFunction("link::resolve", async (payload: { code: string }) => {
     },
   });
 
+  // Log
+  logger.info("link resolved", { code: payload.code, found: !!stored?.url });
   // Return the URL (or null so the caller can show a 404)
   return { url: stored?.url ?? null };
 });
@@ -206,8 +208,8 @@ worker.registerFunction("http::redirect", async (req) => {
 worker.registerTrigger({
   type: "http",
   function_id: "http::redirect",
-  config: { 
-    api_path: "/s/:code", 
-    http_method: "GET" 
+  config: {
+    api_path: "/s/:code",
+    http_method: "GET",
   },
 });
