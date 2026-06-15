@@ -5,6 +5,9 @@ data/
 # Kiro AI steering docs
 .kiro/steering/
 
+# iii local project config
+.iii/
+
 #Sqlite
 *.db
 
