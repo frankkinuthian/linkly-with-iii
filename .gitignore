@@ -2,6 +2,9 @@
 .env
 data/
 
+# Kiro AI steering docs
+.kiro/steering/
+
 #Sqlite
 *.db
 
