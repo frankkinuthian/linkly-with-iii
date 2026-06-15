@@ -1,6 +1,8 @@
 # iii unifying backend engine files
 .env
 data/
+iii.lock
+.DS_Store
 
 # Kiro AI steering docs
 .kiro/steering/
