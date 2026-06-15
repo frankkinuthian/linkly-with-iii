@@ -75,3 +75,5 @@ workers:
           file_path: ./data/stream_store
   - name: click-streamer
     worker_path: /Users/frank/Desktop/builds/three-eye-framework/linkly/click-streamer
+  - name: bulk-importer
+    worker_path: /Users/frank/Desktop/builds/three-eye-framework/linkly/bulk-importer
