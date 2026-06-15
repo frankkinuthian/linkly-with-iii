@@ -38,6 +38,10 @@ workers:
     version: 0.19.2
     type: engine
     dependencies: {}
+  iii-pubsub:
+    version: 0.19.2
+    type: engine
+    dependencies: {}
   iii-state:
     version: 0.19.2
     type: engine

@@ -16,6 +16,11 @@ workers:
 
   - name: iii-queue
     config:
+      queue_configs:
+        clicks:
+          type: standard
+          max_retries: 5
+          concurrency: 5
       adapter:
         name: builtin
   - name: iii-http
@@ -51,3 +56,11 @@ workers:
             idle_timeout_ms: 30000
             max: 10
           url: sqlite:./data/iii.db
+        analytics:
+          url: sqlite:./data/analytics.db
+  - name: iii-pubsub
+    config:
+      adapter:
+        name: local
+  - name: analytics
+    worker_path: /Users/frank/Desktop/builds/three-eye-framework/linkly/analytics
