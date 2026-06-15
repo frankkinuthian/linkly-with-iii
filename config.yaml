@@ -42,3 +42,12 @@ workers:
           file_path: ./data/state_store.db
   - name: link
     worker_path: /Users/frank/Desktop/builds/three-eye-framework/linkly/link
+  - name: database
+    config:
+      databases:
+        primary:
+          pool:
+            acquire_timeout_ms: 5000
+            idle_timeout_ms: 30000
+            max: 10
+          url: sqlite:./data/iii.db
