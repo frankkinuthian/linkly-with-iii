@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "../../packages/ui/src/styles/globals.css",
+    "css": "../../packages/design-system/src/styles/globals.css",
     "baseColor": "stone",
     "cssVariables": true
   },
@@ -14,8 +14,8 @@
     "components": "@/components",
     "hooks": "@/hooks",
     "lib": "@/lib",
-    "utils": "@repo/ui/lib/utils",
-    "ui": "@repo/ui/components"
+    "utils": "@repo/design-system/lib/utils",
+    "ui": "@repo/design-system/components"
   },
   "rtl": false,
   "menuColor": "inverted-translucent",

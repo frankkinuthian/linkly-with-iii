@@ -6,7 +6,7 @@ iii.lock
 
 # Kiro AI steering docs
 .kiro/steering/
-
+.cache*
 # iii local project config
 .iii/
 
