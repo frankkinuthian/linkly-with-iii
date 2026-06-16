@@ -1,6 +1,7 @@
 import { source } from "../../../lib/source";
 import { getMDXComponents } from "../../../components/mdx";
 import { notFound } from "next/navigation";
+import { DocsPage, DocsBody } from "fumadocs-ui/page";
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -12,13 +13,17 @@ export default async function Page(props: {
   const MDX = page.data.body;
 
   return (
-    <article className="prose prose-neutral dark:prose-invert max-w-none">
-      <h1>{page.data.title}</h1>
-      {page.data.description && (
-        <p className="text-muted-foreground text-lg">{page.data.description}</p>
-      )}
-      <MDX components={getMDXComponents()} />
-    </article>
+    <DocsPage>
+      <DocsBody>
+        <h1>{page.data.title}</h1>
+        {page.data.description && (
+          <p className="text-fd-muted-foreground text-lg -mt-2 mb-8">
+            {page.data.description}
+          </p>
+        )}
+        <MDX components={getMDXComponents()} />
+      </DocsBody>
+    </DocsPage>
   );
 }
 
