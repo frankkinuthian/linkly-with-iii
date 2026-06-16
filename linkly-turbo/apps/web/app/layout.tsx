@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import "@repo/design-system/globals.css";
 import { Lora, Inter } from "next/font/google";
+import { Providers } from "./components/providers";
+import "@repo/design-system/globals.css";
 import { cn } from "@repo/design-system/lib/utils";
 
 const interHeading = Inter({ subsets: ["latin"], variable: "--font-heading" });
-
 const lora = Lora({ subsets: ["latin"], variable: "--font-serif" });
 
 const geistSans = localFont({
@@ -33,9 +33,9 @@ export default function RootLayout({
       className={cn("font-serif", lora.variable, interHeading.variable)}
     >
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background`}
       >
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

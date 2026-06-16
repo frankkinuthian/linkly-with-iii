@@ -1,7 +1,9 @@
 import { CreateLinkForm } from "./components/create-link-form";
 import { LiveClicks } from "./components/live-clicks";
 import { LinksList } from "./components/links-list";
+import { Navbar } from "./components/navbar";
 import { listLinks } from "./actions";
+import { Separator } from "@repo/design-system/components/separator";
 
 export const dynamic = "force-dynamic";
 
@@ -9,18 +11,20 @@ export default async function Home() {
   const links = await listLinks();
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">
-      <div className="text-center space-y-2">
-        <h1 className="text-4xl font-heading font-bold tracking-tight">
-          Linkly
-        </h1>
-        <p className="text-muted-foreground">
-          Shorten links. Track clicks. In real time.
-        </p>
-      </div>
-      <CreateLinkForm />
-      <LinksList initialLinks={links} />
-      <LiveClicks />
-    </main>
+    <div className="flex flex-col min-h-screen">
+      <Navbar />
+      <main className="flex-1 container mx-auto max-w-5xl px-4 py-8">
+        <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+          <div className="space-y-8">
+            <CreateLinkForm />
+            <Separator />
+            <LinksList initialLinks={links} />
+          </div>
+          <aside className="space-y-6">
+            <LiveClicks />
+          </aside>
+        </div>
+      </main>
+    </div>
   );
 }

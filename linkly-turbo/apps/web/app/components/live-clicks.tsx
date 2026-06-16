@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@repo/design-system/components/card";
 import type { LinkClickedEvent } from "@repo/database/types";
 
 const RELAY_URL = process.env.NEXT_PUBLIC_RELAY_URL ?? "ws://localhost:4000";
@@ -29,17 +35,13 @@ export function LiveClicks() {
 
       ws.onclose = () => {
         setConnected(false);
-        // Reconnect after 3 seconds
         reconnectTimeout = setTimeout(connect, 3000);
       };
 
-      ws.onerror = () => {
-        ws.close();
-      };
+      ws.onerror = () => ws.close();
     }
 
     connect();
-
     return () => {
       clearTimeout(reconnectTimeout);
       ws?.close();
@@ -47,24 +49,30 @@ export function LiveClicks() {
   }, []);
 
   return (
-    <div className="w-full max-w-md rounded-lg border p-6 text-center space-y-3">
-      <div className="flex items-center justify-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
-        <span
-          className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`}
-        />
-        Live clicks
-      </div>
-      <p className="text-5xl font-mono font-bold text-primary">{clicks}</p>
-      {latest ? (
-        <p className="text-sm text-muted-foreground">
-          Latest: <code className="text-foreground">{latest.code}</code> at{" "}
-          <code className="text-foreground">{latest.clicked_at}</code>
-        </p>
-      ) : (
-        <p className="text-sm text-muted-foreground italic">
-          Waiting for clicks…
-        </p>
-      )}
-    </div>
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm font-medium">
+          <span
+            className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`}
+          />
+          Live clicks
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-4xl font-mono font-bold">{clicks}</p>
+        {latest ? (
+          <p className="text-xs text-muted-foreground mt-2">
+            Last:{" "}
+            <code className="font-medium text-foreground">{latest.code}</code>
+            <br />
+            <span>{latest.clicked_at}</span>
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground mt-2 italic">
+            Waiting for clicks…
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }

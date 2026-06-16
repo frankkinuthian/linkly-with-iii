@@ -11,17 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/design-system/components/card";
+import { toast } from "sonner";
 import { createLink } from "../actions";
-import type { CreateLinkOutput } from "@repo/database/types";
 
 export function CreateLinkForm() {
-  const [result, setResult] = useState<CreateLinkOutput | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     setLoading(true);
 
     const form = e.currentTarget;
@@ -31,17 +28,21 @@ export function CreateLinkForm() {
 
     try {
       const link = await createLink(url, code || undefined);
-      setResult(link);
+      toast.success("Link created", {
+        description: `${link.code} → ${link.url}`,
+      });
       form.reset();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create link");
+      toast.error("Failed to create link", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Card className="w-full max-w-md">
+    <Card>
       <CardHeader>
         <CardTitle>Create a short link</CardTitle>
         <CardDescription>
@@ -60,32 +61,21 @@ export function CreateLinkForm() {
               required
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="code">
-              Custom code{" "}
-              <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Input id="code" name="code" placeholder="my-code" />
+          <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+            <div className="space-y-2">
+              <Label htmlFor="code">
+                Custom code{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Input id="code" name="code" placeholder="my-code" />
+            </div>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Creating..." : "Shorten"}
+            </Button>
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Creating..." : "Shorten"}
-          </Button>
         </form>
-
-        {error && (
-          <div className="mt-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
-        {result && (
-          <div className="mt-4 rounded-md border bg-muted/50 p-3 text-sm">
-            <p className="text-muted-foreground">Created:</p>
-            <p className="mt-1 font-mono font-medium">
-              {result.code} → {result.url}
-            </p>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
