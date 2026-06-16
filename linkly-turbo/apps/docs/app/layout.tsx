@@ -1,32 +1,18 @@
-import type { Metadata } from "next";
-import localFont from "next/font/local";
-import "@repo/design-system/globals.css";
+import { RootProvider } from "fumadocs-ui/provider/next";
+import type { ReactNode } from "react";
+import "fumadocs-ui/css/neutral.css";
+import "fumadocs-ui/css/preset.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-});
-
-export const metadata: Metadata = {
+export const metadata = {
   title: "Linkly Docs",
-  description: "API documentation for Linkly",
+  description: "Documentation and API reference for Linkly",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+    <html lang="en" suppressHydrationWarning>
+      <body className="flex flex-col min-h-screen">
+        <RootProvider>{children}</RootProvider>
       </body>
     </html>
   );

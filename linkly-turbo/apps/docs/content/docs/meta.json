@@ -1,0 +1,16 @@
+{
+  "title": "Tutorial",
+  "pages": [
+    "---Getting Started---",
+    "index",
+    "---Chapters---",
+    "foundations",
+    "observability",
+    "persistence",
+    "durability",
+    "streaming",
+    "channels",
+    "browser",
+    "nextjs"
+  ]
+}

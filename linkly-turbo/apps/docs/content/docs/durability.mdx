@@ -1,0 +1,84 @@
+---
+title: "Ch. 4: Make it durable"
+description: Move click-row writes onto a queue, then broadcast link events to independent subscribers.
+---
+
+Click recording on the redirect hot path is slow. Move it to a queue so redirects return immediately, then use pub/sub to broadcast events to independent subscribers.
+
+## Enqueue click recording
+
+```typescript
+import { TriggerAction } from "iii-sdk";
+
+await worker.trigger({
+  function_id: "link::record_click",
+  payload: { code, clicked_at: new Date().toISOString() },
+  action: TriggerAction.Enqueue({ queue: "clicks" }),
+});
+```
+
+The redirect returns immediately. The queue drains in the background with retries.
+
+## Configure the queue
+
+```yaml
+- name: iii-queue
+  config:
+    queue_configs:
+      clicks:
+        type: standard
+        max_retries: 5
+        concurrency: 5
+```
+
+## Publish events with pub/sub
+
+Regular pub/sub for best-effort fan-out:
+
+```typescript
+await worker.trigger({
+  function_id: "publish",
+  payload: { topic: "link.created", data: { code, url } },
+});
+```
+
+Durable pub/sub for guaranteed delivery:
+
+```typescript
+await worker.trigger({
+  function_id: "iii::durable::publish",
+  payload: { topic: "link.updated", data: { code, url } },
+});
+```
+
+## Reactive state: cache refresh
+
+Subscribe to `link.updated` to keep the cache correct without coupling:
+
+```typescript
+worker.registerFunction("link::on_link_updated", async (data) => {
+  await worker.trigger({
+    function_id: "state::set",
+    payload: { scope: "links", key: data.code, value: { url: data.url } },
+  });
+});
+
+worker.registerTrigger({
+  type: "durable:subscriber",
+  function_id: "link::on_link_updated",
+  config: { topic: "link.updated" },
+});
+```
+
+## Add a Python analytics worker
+
+A separate worker subscribes to `link.created` and counts links per day — completely decoupled:
+
+```python
+worker.register_function("analytics::on_link_created", on_link_created)
+worker.register_trigger({
+    "type": "subscribe",
+    "function_id": "analytics::on_link_created",
+    "config": {"topic": "link.created"},
+})
+```

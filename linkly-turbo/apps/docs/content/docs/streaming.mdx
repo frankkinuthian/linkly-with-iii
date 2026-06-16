@@ -1,0 +1,61 @@
+---
+title: "Ch. 5: Stream live clicks"
+description: Push clicks to subscribers in real time with a dedicated click-streamer worker and iii-stream.
+---
+
+`iii-stream` pushes data to clients the moment it changes — a live feed of clicks for a dashboard. You'll move the broadcast concern into its own `click-streamer` worker.
+
+## Add the stream worker
+
+```bash
+iii worker add iii-stream
+iii worker init click-streamer --language typescript
+```
+
+## Broadcast clicks
+
+The `click-streamer` subscribes to `link.clicked` pub/sub and pushes each click onto a named stream:
+
+```typescript
+worker.registerFunction("click-streamer::broadcast", async (data) => {
+  await worker.trigger({
+    function_id: "stream::set",
+    payload: {
+      stream_name: "clicks",
+      group_id: "all",
+      item_id: `${data.code}-${data.clicked_at}`,
+      data,
+    },
+  });
+  return { streamed: true };
+});
+
+worker.registerTrigger({
+  type: "subscribe",
+  function_id: "click-streamer::broadcast",
+  config: { topic: "link.clicked" },
+});
+```
+
+## Publish the click event from link worker
+
+```typescript
+worker.trigger({
+  function_id: "publish",
+  payload: { topic: "link.clicked", data: payload },
+  action: TriggerAction.Void(),
+});
+```
+
+`TriggerAction.Void()` means fire-and-forget — the function returns before the publish completes.
+
+## See it work
+
+```bash
+curl -s -X POST http://127.0.0.1:3111/links \
+  -H 'Content-Type: application/json' -d '{"url":"https://iii.dev","code":"stream-me"}'
+
+for n in $(seq 1 3); do curl -s -o /dev/null http://127.0.0.1:3111/s/stream-me; done
+
+iii trigger stream::list stream_name=clicks group_id=all
+```

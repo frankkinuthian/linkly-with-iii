@@ -1,0 +1,44 @@
+---
+title: "Ch. 2: Observe everything"
+description: Watch Linkly run live in the iii console, then read logs and traces from the engine.
+---
+
+Every cross-worker call flows through the engine, so the engine traces and logs the whole system end to end. No per-service tracing libraries needed.
+
+## Open the console
+
+```bash
+iii console
+```
+
+Open `http://127.0.0.1:3113`. Every worker, function, and trigger is listed. Navigate to traces and watch invocations stream live.
+
+## Add logging
+
+```typescript
+import { Logger } from "@iii-dev/observability";
+const logger = new Logger();
+
+worker.registerFunction("link::resolve", async (payload) => {
+  const stored = await worker.trigger({
+    /* ... */
+  });
+  logger.info("link resolved", { code: payload.code, found: !!stored?.url });
+  return { url: stored?.url ?? null };
+});
+```
+
+## Read logs from the engine
+
+```bash
+iii trigger engine::logs::list limit=100
+```
+
+## Follow a trace
+
+```bash
+iii trigger engine::traces::list name="GET /s/:code" limit=1
+iii trigger engine::traces::tree trace_id=<trace_id>
+```
+
+Every request gets a full waterfall of timed spans crossing workers — no instrumentation code required.

@@ -1,0 +1,96 @@
+---
+title: "Ch. 8: Go full-stack with Next.js"
+description: Port the browser-worker Vite app into a server-side Next.js app within a Turborepo.
+---
+
+Move from browser-as-worker to a proper production architecture: Next.js frontend on Vercel, iii backend on Railway, shared types, and a WebSocket relay for real-time.
+
+## Why move to Next.js?
+
+- Server-side rendering, no secrets in the browser
+- Deployment separation (Vercel + Railway)
+- Shared type contracts via workspace packages
+- Server actions as the bridge between frontend and iii
+
+## Turborepo structure
+
+```
+linkly-turbo/
+├── apps/
+│   ├── web/          ← Next.js (Vercel)
+│   ├── docs/         ← Fumadocs + Scalar (Vercel)
+│   └── api/          ← iii engine + workers (Railway)
+├── packages/
+│   ├── iii/          ← Server-only iii client
+│   ├── database/     ← Shared types
+│   └── design-system/ ← shadcn components
+```
+
+## The iii client package
+
+```typescript
+// packages/iii/index.ts
+import "server-only";
+import { registerWorker } from "iii-sdk";
+import { keys } from "./keys";
+
+const globalForIII = global as unknown as {
+  iii: ReturnType<typeof registerWorker>;
+};
+export const iii =
+  globalForIII.iii ||
+  registerWorker(keys().III_URL, { workerName: "next-server" });
+if (process.env.NODE_ENV !== "production") globalForIII.iii = iii;
+```
+
+## Server actions
+
+```typescript
+"use server";
+import { iii } from "@repo/iii";
+import type { CreateLinkInput, CreateLinkOutput } from "@repo/database/types";
+
+export async function createLink(
+  url: string,
+  code?: string,
+): Promise<CreateLinkOutput> {
+  const link = await iii.trigger<CreateLinkInput, CreateLinkOutput>({
+    function_id: "link::create",
+    payload: { url, code: code || undefined },
+  });
+  revalidatePath("/");
+  return link;
+}
+```
+
+## Relay worker for real-time
+
+A dedicated iii worker runs a WebSocket server, subscribes to `link.clicked`, and broadcasts to connected browsers:
+
+```typescript
+const wss = new WebSocketServer({ port: 4000 });
+const clients = new Set<WebSocket>();
+
+worker.registerFunction("relay::on_click", async (data) => {
+  const message = JSON.stringify({ type: "click", data });
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+  return null;
+});
+
+worker.registerTrigger({
+  type: "subscribe",
+  function_id: "relay::on_click",
+  config: { topic: "link.clicked" },
+});
+```
+
+The browser connects with a plain `new WebSocket(RELAY_URL)` — no iii SDK needed client-side.
+
+## Deployment
+
+| Target  | What                    | How                                                 |
+| ------- | ----------------------- | --------------------------------------------------- |
+| Vercel  | `apps/web`, `apps/docs` | Separate Vercel projects, env vars point to Railway |
+| Railway | `apps/api`              | Dockerfile runs `iii --config config.yaml`          |

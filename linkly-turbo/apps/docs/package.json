@@ -13,6 +13,10 @@
   "dependencies": {
     "@repo/design-system": "workspace:*",
     "@scalar/nextjs-api-reference": "^0.11.3",
+    "@types/mdx": "^2.0.14",
+    "fumadocs-core": "^16.10.3",
+    "fumadocs-mdx": "^15.0.12",
+    "fumadocs-ui": "^16.10.3",
     "next": "16.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

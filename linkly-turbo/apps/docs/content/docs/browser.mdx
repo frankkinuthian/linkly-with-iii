@@ -1,0 +1,80 @@
+---
+title: "Ch. 7: Bring in the browser"
+description: Turn a browser tab into an iii worker that creates links, shows live clicks, and answers server-initiated prompts.
+---
+
+The browser becomes a worker. It connects to the engine over WebSocket, calls `link::create` directly, subscribes to the live click stream, and registers functions the server can call back.
+
+## RBAC-gated listener
+
+Browsers connect through a separate `iii-worker-manager` listener with an auth function:
+
+```yaml
+- name: iii-worker-manager
+  config:
+    port: 3110
+    rbac:
+      auth_function_id: auth::browser
+      expose_functions:
+        - match("link::create")
+        - match("link::request_delete")
+        - match("stream::*")
+```
+
+## Auth worker
+
+```typescript
+worker.registerFunction("auth::browser", async (input) => {
+  const token = input.query_params.token?.[0];
+  if (!token || token !== (process.env.LINKLY_BROWSER_TOKEN ?? "dev-token")) {
+    throw new Error("unauthorized");
+  }
+  return {
+    allowed_functions: [],
+    forbidden_functions: [],
+    allow_function_registration: true,
+    context: { source: "browser" },
+  };
+});
+```
+
+## Browser SDK
+
+```typescript
+import { registerWorker } from "iii-browser-sdk";
+
+const worker = registerWorker(`ws://localhost:3110?token=dev-token`);
+
+// Call server functions directly
+const link = await worker.trigger({
+  function_id: "link::create",
+  payload: { url: "https://iii.dev" },
+});
+
+// Register a function the server can call
+worker.registerFunction("user::confirm_destructive_op", async (data) => {
+  const confirmed = window.confirm(`Confirm: ${data.action}?`);
+  return { confirmed };
+});
+```
+
+## Server-initiated browser calls
+
+The server calls the browser-registered function like any other:
+
+```typescript
+worker.registerFunction("link::request_delete", async (payload) => {
+  const { confirmed } = await worker.trigger({
+    function_id: "user::confirm_destructive_op",
+    payload: { code: payload.code, action: `delete link "${payload.code}"` },
+  });
+  if (!confirmed) return { deleted: false };
+  await worker.trigger({
+    function_id: "link::delete",
+    payload: { code: payload.code },
+  });
+  return { deleted: true };
+});
+```
+
+There's no special "call browser" API — it's just `worker.trigger` with a function ID that happens to be registered by a browser worker.

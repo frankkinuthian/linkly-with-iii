@@ -1,0 +1,81 @@
+---
+title: "Ch. 3: Persist everything"
+description: Add a SQLite database for durable storage of links and a timestamped row for every click.
+---
+
+Links in `iii-state` are in-memory — restart and they're gone. This chapter adds a `database` worker (SQLite) for durable storage, with `iii-state` as a fast cache in front.
+
+## Add the database worker
+
+```bash
+iii worker add database
+mkdir -p data
+```
+
+Configure it in `config.yaml`:
+
+```yaml
+- name: database
+  config:
+    databases:
+      primary:
+        url: sqlite:./data/iii.db
+```
+
+## Make storage persistent
+
+`link::create` writes to both DB (durable) and state (cache):
+
+```typescript
+await worker.trigger({
+  function_id: "database::execute",
+  payload: {
+    db: "primary",
+    sql: "INSERT INTO links (code, url, created_at) VALUES (?, ?, ?)",
+    params: [code, url, new Date().toISOString()],
+  },
+});
+
+await worker.trigger({
+  function_id: "state::set",
+  payload: { scope: "links", key: code, value: { url } },
+});
+```
+
+## Cache-ahead reads
+
+`link::resolve` checks cache first, falls back to DB, then warms the cache:
+
+```typescript
+const cached = await worker.trigger({
+  function_id: "state::get",
+  payload: { scope: "links", key: payload.code },
+});
+
+if (cached) return { url: cached.url };
+
+const { rows } = await worker.trigger({
+  function_id: "database::query",
+  payload: {
+    db: "primary",
+    sql: "SELECT url FROM links WHERE code = ?",
+    params: [payload.code],
+  },
+});
+```
+
+## Add click tracking
+
+```typescript
+worker.registerFunction("link::record_click", async (payload) => {
+  await worker.trigger({
+    function_id: "database::execute",
+    payload: {
+      db: "primary",
+      sql: "INSERT INTO clicks (code, clicked_at) VALUES (?, ?)",
+      params: [payload.code, payload.clicked_at],
+    },
+  });
+  return { recorded: true };
+});
+```

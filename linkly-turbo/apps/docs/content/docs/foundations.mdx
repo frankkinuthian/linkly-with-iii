@@ -1,0 +1,88 @@
+---
+title: "Ch. 1: Foundations"
+description: Build the link worker with link::create and link::resolve, then expose it over HTTP.
+---
+
+In this chapter you build the core of Linkly: a worker that creates short codes and resolves them back to URLs, callable first from the command line and then over HTTP.
+
+## Create the project
+
+```bash
+iii project init linkly
+cd linkly
+```
+
+## Add workers
+
+```bash
+iii worker add iii-http
+iii worker add iii-state
+```
+
+## Create the link worker
+
+```bash
+iii worker init link --language typescript
+```
+
+## Register functions
+
+The worker registers `link::create` and `link::resolve`:
+
+```typescript
+import { registerWorker } from "iii-sdk";
+
+const worker = registerWorker(process.env.III_URL ?? "ws://localhost:49134", {
+  workerName: "link",
+});
+
+worker.registerFunction("link::create", async (payload) => {
+  const code = payload.code ?? makeCode();
+  const url = /^https?:\/\//i.test(payload.url)
+    ? payload.url
+    : `https://${payload.url}`;
+  await worker.trigger({
+    function_id: "state::set",
+    payload: { scope: "links", key: code, value: { url } },
+  });
+  return { code, url };
+});
+
+worker.registerFunction("link::resolve", async (payload) => {
+  const stored = await worker.trigger({
+    function_id: "state::get",
+    payload: { scope: "links", key: payload.code },
+  });
+  return { url: stored?.url ?? null };
+});
+```
+
+## Expose over HTTP
+
+Bind functions to HTTP triggers:
+
+```typescript
+worker.registerTrigger({
+  type: "http",
+  function_id: "http::create",
+  config: { api_path: "/links", http_method: "POST" },
+});
+
+worker.registerTrigger({
+  type: "http",
+  function_id: "http::redirect",
+  config: { api_path: "/s/:code", http_method: "GET" },
+});
+```
+
+## Test it
+
+```bash
+curl -X POST http://127.0.0.1:3111/links \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://iii.dev","code":"demo"}'
+
+curl -i http://127.0.0.1:3111/s/demo
+# HTTP/1.1 302 Found
+# location: https://iii.dev
+```
