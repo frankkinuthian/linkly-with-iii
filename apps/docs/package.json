@@ -19,7 +19,8 @@
     "fumadocs-ui": "^16.10.3",
     "next": "16.2.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
