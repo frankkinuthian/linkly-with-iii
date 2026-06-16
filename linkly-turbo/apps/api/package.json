@@ -1,0 +1,9 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "iii --config config.yaml",
+    "build": "echo 'No build step — iii manages workers at runtime'"
+  }
+}

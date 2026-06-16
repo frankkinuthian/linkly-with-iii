@@ -1,0 +1,190 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Linkly API",
+    "description": "URL shortener powered by iii. Create short links, resolve them, track clicks in real time.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3111",
+      "description": "Local development (iii-http)"
+    }
+  ],
+  "paths": {
+    "/links": {
+      "post": {
+        "operationId": "createLink",
+        "summary": "Create a short link",
+        "description": "Shortens a URL and returns the generated (or custom) short code.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "The destination URL to shorten",
+                    "example": "https://iii.dev/docs"
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "Optional custom short code. If omitted, a random 6-char code is generated.",
+                    "example": "my-link"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Link created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Link"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/links/{code}": {
+      "put": {
+        "operationId": "updateLink",
+        "summary": "Update a link's target URL",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "The short code to update"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "The new destination URL",
+                    "example": "https://iii.dev/docs/quickstart"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Link updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Link"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/s/{code}": {
+      "get": {
+        "operationId": "redirectLink",
+        "summary": "Resolve and redirect",
+        "description": "Looks up the short code and returns a 302 redirect to the original URL. Records a click event.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "The short code to resolve"
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the original URL",
+            "headers": {
+              "Location": {
+                "schema": { "type": "string" },
+                "description": "The original URL"
+              }
+            }
+          },
+          "404": {
+            "description": "Link not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Link": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The short code",
+            "example": "my-link"
+          },
+          "url": {
+            "type": "string",
+            "description": "The destination URL",
+            "example": "https://iii.dev/docs"
+          }
+        },
+        "required": ["code", "url"]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error message",
+            "example": "Missing url."
+          }
+        }
+      }
+    }
+  }
+}

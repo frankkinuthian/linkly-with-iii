@@ -1,0 +1,112 @@
+# iii engine configuration
+# Docs: https://iii.dev/docs/how-to/configure-engine
+workers:
+  - name: iii-observability
+    config:
+      enabled: true
+      service_name: linkly
+      exporter: memory
+      memory_max_spans: 10000
+      metrics_enabled: true
+      metrics_exporter: memory
+      logs_enabled: true
+      logs_exporter: memory
+      logs_console_output: true
+      sampling_ratio: 1.0
+
+  - name: iii-queue
+    config:
+      queue_configs:
+        clicks:
+          type: standard
+          max_retries: 5
+          concurrency: 5
+      adapter:
+        name: builtin
+
+  - name: iii-http
+    config:
+      port: ${III_HTTP_PORT:3111}
+      host: 0.0.0.0
+      default_timeout: 30000
+      concurrency_request_limit: 1024
+      cors:
+        allowed_origins:
+          - "*"
+        allowed_methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+
+  - name: iii-state
+    config:
+      adapter:
+        name: kv
+        config:
+          store_method: file_based
+          file_path: ./data/state_store.db
+
+  - name: database
+    config:
+      databases:
+        primary:
+          pool:
+            acquire_timeout_ms: 5000
+            idle_timeout_ms: 30000
+            max: 10
+          url: sqlite:./data/iii.db
+        analytics:
+          url: sqlite:./data/analytics.db
+
+  - name: iii-pubsub
+    config:
+      adapter:
+        name: local
+
+  - name: iii-stream
+    config:
+      port: ${III_STREAM_PORT:3112}
+      host: 0.0.0.0
+      adapter:
+        name: kv
+        config:
+          store_method: file_based
+          file_path: ./data/stream_store
+
+  # Workers
+  - name: link
+    worker_path: ./workers/link
+
+  - name: analytics
+    worker_path: ./workers/analytics
+
+  - name: click-streamer
+    worker_path: ./workers/click-streamer
+
+  - name: bulk-importer
+    worker_path: ./workers/bulk-importer
+
+  - name: auth
+    worker_path: ./workers/auth
+
+  - name: relay
+    worker_path: ./workers/relay
+
+  # Trusted listener for local workers
+  - name: iii-worker-manager
+    config:
+      port: 49134
+
+  # Browser/external-facing listener (RBAC-gated)
+  - name: iii-worker-manager
+    config:
+      host: 0.0.0.0
+      port: ${III_PUBLIC_WS_PORT:3110}
+      rbac:
+        auth_function_id: auth::browser
+        expose_functions:
+          - match("link::create")
+          - match("link::request_delete")
+          - match("stream::*")
