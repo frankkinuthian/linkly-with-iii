@@ -41,5 +41,5 @@ yarn-error.log*
 .cache*
 .iii*
 .vscode*
-data*
+/data*
 .turbo*
