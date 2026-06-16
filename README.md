@@ -1,106 +1,214 @@
 # Linkly
 
-A URL shortener built on [iii](https://iii.dev) — the engine that replaces your API framework, task queue, cron scheduler, pub/sub, state store, and observability pipeline with three primitives: **Function**, **Trigger**, **Worker**.
+A full-stack URL shortener built on [iii](https://iii.dev) and Next.js, structured as a Turborepo monorepo. The frontend deploys to Vercel, the backend (iii engine + workers) deploys to Railway.
 
 ## Architecture
 
-Linkly is a multi-worker system where each worker owns a single concern:
+```
+Browser ──→ Vercel (apps/web)
+              │
+              │ server actions (WebSocket)
+              ▼
+           Railway (apps/api)
+              │
+              ├── iii engine
+              ├── link worker
+              ├── click-streamer worker
+              ├── bulk-importer worker
+              ├── auth worker
+              ├── analytics worker (Python)
+              └── relay worker ──→ WebSocket push to browser
+```
 
-| Worker           | Language   | Responsibility                                                                             |
-| ---------------- | ---------- | ------------------------------------------------------------------------------------------ |
-| `link`           | TypeScript | Core CRUD — create, resolve, update, delete short links. HTTP layer for external access.   |
-| `analytics`      | Python     | Subscribes to `link.created` events, maintains daily link counts in its own database.      |
-| `click-streamer` | TypeScript | Subscribes to `link.clicked` pub/sub events, pushes each click onto a live stream.         |
-| `bulk-importer`  | TypeScript | Accepts a channel with CSV data and batch-creates links.                                   |
-| `auth`           | TypeScript | Gates browser connections via an RBAC auth function.                                       |
-| `frontend`       | React/TS   | Browser-based worker — creates links, shows live clicks, answers server-initiated prompts. |
+Server actions in the Next.js app call iii functions over WebSocket. The relay worker pushes live click events to browsers over a separate WebSocket connection. The browser never touches the iii engine directly.
 
-### Engine workers (from the registry)
+## Project Structure
 
-- `iii-http` — HTTP API (port 3111)
-- `iii-state` — Key-value cache
-- `iii-queue` — Background job processing with retries and DLQ
-- `iii-pubsub` — In-process event fan-out
-- `iii-stream` — Real-time WebSocket streams (port 3112)
-- `iii-worker-manager` — Worker connection lifecycle and RBAC listeners
-- `iii-observability` — OpenTelemetry traces, metrics, logs
-- `database` — SQLite (durable storage)
+```
+linkly-turbo/
+├── apps/
+│   ├── web/                  Next.js frontend (Vercel, port 3000)
+│   ├── docs/                 API documentation with Scalar (Vercel, port 3001)
+│   └── api/                  iii engine + all workers (Railway)
+│       ├── config.yaml       Engine configuration
+│       ├── Dockerfile        Railway deployment
+│       └── workers/
+│           ├── link/         Core CRUD — create, resolve, update, delete
+│           ├── click-streamer/ Subscribes to clicks, pushes to iii-stream
+│           ├── bulk-importer/  CSV import over channels
+│           ├── auth/         Browser connection gating (RBAC)
+│           ├── analytics/    Daily link counter (Python)
+│           └── relay/        WebSocket server for live browser events
+│
+├── packages/
+│   ├── iii/                  Server-only iii client with env validation
+│   ├── database/             Shared types (Link, Click, function I/O shapes)
+│   ├── design-system/        shadcn/ui + Tailwind v4 component library
+│   ├── typescript-config/    Shared tsconfig presets
+│   └── eslint-config/        Shared ESLint rules
+│
+├── docs/                     Tutorial chapters (Markdown)
+├── turbo.json                Turborepo pipeline config
+└── pnpm-workspace.yaml       Workspace package declarations
+```
 
-## Getting started
+## Apps
+
+| App    | Port             | Purpose                                                       | Deploys to |
+| ------ | ---------------- | ------------------------------------------------------------- | ---------- |
+| `web`  | 3000             | Main product UI — create links, view list, live click counter | Vercel     |
+| `docs` | 3001             | Interactive API reference (Scalar + OpenAPI)                  | Vercel     |
+| `api`  | 3111, 3112, 4000 | iii engine with all backend workers                           | Railway    |
+
+## Packages
+
+| Package             | Name                      | Purpose                                                    |
+| ------------------- | ------------------------- | ---------------------------------------------------------- |
+| `iii`               | `@repo/iii`               | Configured iii-sdk worker instance (server-only singleton) |
+| `database`          | `@repo/database`          | Shared TypeScript types and SQL schema reference           |
+| `design-system`     | `@repo/design-system`     | shadcn components, Tailwind theme, PostCSS config          |
+| `typescript-config` | `@repo/typescript-config` | Shared tsconfig base, nextjs, react-library presets        |
+| `eslint-config`     | `@repo/eslint-config`     | Shared ESLint configuration                                |
+
+## Workers (in apps/api/workers/)
+
+| Worker           | Language   | Responsibility                                                        |
+| ---------------- | ---------- | --------------------------------------------------------------------- |
+| `link`           | TypeScript | Core link CRUD, HTTP endpoints, click recording, cache management     |
+| `click-streamer` | TypeScript | Subscribes to `link.clicked` pub/sub, pushes to iii-stream            |
+| `bulk-importer`  | TypeScript | Accepts CSV data over a channel, batch-creates links                  |
+| `auth`           | TypeScript | Gates browser WebSocket connections via RBAC auth function            |
+| `analytics`      | Python     | Subscribes to `link.created`, maintains daily counts in its own DB    |
+| `relay`          | TypeScript | WebSocket server (port 4000) that broadcasts click events to browsers |
+
+## Getting Started
 
 ### Prerequisites
 
 - [iii engine](https://iii.dev/docs/quickstart) installed
 - Node.js 20+
+- pnpm 9+
 - Python 3.11+ (for the analytics worker)
 
-### Run
+### Install dependencies
 
 ```bash
-# From the project root
-iii
+pnpm install
 ```
 
-The engine reads `config.yaml`, installs worker dependencies on first run, and starts everything. Workers connect over WebSocket and register their functions automatically.
-
-### Endpoints
-
-| Method | Path           | Description                                              |
-| ------ | -------------- | -------------------------------------------------------- |
-| POST   | `/links`       | Create a short link (`{ "url": "...", "code?": "..." }`) |
-| PUT    | `/links/:code` | Update a link's target URL                               |
-| GET    | `/s/:code`     | Redirect to the original URL (302)                       |
-
-### CLI usage
+### Start the iii backend
 
 ```bash
-iii trigger link::create url=https://example.com code=demo
-iii trigger link::resolve code=demo
-iii trigger link::request_delete code=demo
+cd apps/api && iii --config config.yaml
 ```
 
-### Frontend
+This starts the engine, installs worker dependencies on first run, and connects all workers.
+
+### Start the web app
 
 ```bash
-cd frontend
-npm install
-npm run dev
+pnpm dev --filter=web
 ```
 
-Opens at `http://localhost:5173`. The browser becomes an iii worker — it creates links directly (no REST gateway), subscribes to the live click stream, and registers a `user::confirm_destructive_op` function the server can call to request human confirmation.
+Open http://localhost:3000 — create links, see them persist, watch the live click counter.
 
-### Bulk import
+### Start the docs app
 
 ```bash
-cd test-channels
-node import-links.js
+pnpm dev --filter=docs
 ```
 
-Streams a CSV of links over a channel to the `bulk-importer` worker.
+Open http://localhost:3001/reference for the interactive Scalar API reference.
 
-## Project structure
+### Run everything
 
-```
-linkly/
-├── config.yaml          # Engine configuration (workers, ports, adapters, queues)
-├── iii.lock             # Reproducible worker lockfile
-├── link/                # Core link worker (TypeScript)
-├── analytics/           # Daily link counter (Python)
-├── click-streamer/      # Real-time click broadcaster (TypeScript)
-├── bulk-importer/       # CSV channel importer (TypeScript)
-├── auth/                # Browser auth gating (TypeScript)
-├── frontend/            # Vite + React browser worker
-├── test-channels/       # Standalone channel test scripts
-├── data/                # Local database files (gitignored)
-└── docs/                # Tutorial chapters
+```bash
+# Terminal 1: iii backend
+cd apps/api && iii --config config.yaml
+
+# Terminal 2: all Next.js apps
+pnpm dev
 ```
 
-## Key patterns demonstrated
+## Environment Variables
 
-- **Cache-ahead reads** — `iii-state` in front of SQLite, with automatic backfill on miss
-- **Durable queues** — Click recording is enqueued so redirects stay fast; retries and DLQ on failure
-- **Pub/sub fan-out** — `link.created` fires to analytics (best-effort); `link.updated` uses durable pub/sub to guarantee cache refresh
-- **Channels** — Binary streaming pipe for bulk CSV upload
-- **Streams** — Real-time push of clicks to connected browsers
-- **Browser as worker** — Client registers functions the server calls back (confirmation prompts)
-- **RBAC** — Browser connections are gated through an auth function on a separate listener port
+### apps/web/.env.local
+
+```
+III_URL=ws://localhost:49134
+NEXT_PUBLIC_RELAY_URL=ws://localhost:4000
+```
+
+### Production (Vercel)
+
+```
+III_URL=wss://your-railway-app.railway.app:49134
+NEXT_PUBLIC_RELAY_URL=wss://your-railway-app.railway.app:4000
+```
+
+## Build
+
+```bash
+pnpm build              # Build all apps
+pnpm build --filter=web # Build only the web app
+pnpm build --filter=docs # Build only docs
+```
+
+## Deployment
+
+### Vercel (frontend)
+
+Connect the repo to Vercel. Create two projects:
+
+1. **Linkly Web** — Root directory: `apps/web`
+2. **Linkly Docs** — Root directory: `apps/docs`
+
+Add `III_URL` and `NEXT_PUBLIC_RELAY_URL` as environment variables pointing to your Railway instance.
+
+### Railway (backend)
+
+Deploy `apps/api` using the included Dockerfile:
+
+```dockerfile
+FROM iiidev/iii:latest
+WORKDIR /app
+COPY config.yaml .
+COPY workers/ ./workers/
+RUN mkdir -p ./data
+EXPOSE 3111 3112 3110 4000 49134
+CMD ["iii", "--config", "config.yaml"]
+```
+
+Expose ports 3111 (HTTP API), 4000 (relay WebSocket), and 49134 (engine WebSocket for the web app's server actions).
+
+## Key Patterns
+
+- **Server actions as the bridge** — Next.js server actions call iii functions via `@repo/iii`. No REST API between frontend and backend.
+- **Shared types** — `@repo/database` defines the contract between workers and the web app. Ready for tRPC, oRPC, or Effect schemas later.
+- **Relay for real-time** — A dedicated iii worker runs a WebSocket server. Browsers connect to it for live push events without touching the engine directly.
+- **Design system** — shadcn components in `@repo/design-system`, shared across all apps. Run `shadcn add` from any app and it routes to the shared package.
+- **Env validation** — `@repo/iii/keys.ts` validates `III_URL` with Zod at build time. Missing env = build error, not runtime crash.
+- **Server-only guard** — `@repo/iii` uses `import "server-only"` to prevent accidental client-side import of the engine connection.
+
+## HTTP Endpoints (via iii-http on Railway)
+
+| Method | Path           | Description                        |
+| ------ | -------------- | ---------------------------------- |
+| POST   | `/links`       | Create a short link                |
+| PUT    | `/links/:code` | Update a link's target URL         |
+| GET    | `/s/:code`     | Redirect to the original URL (302) |
+
+Full interactive documentation available at `/reference` in the docs app.
+
+## Tutorial
+
+The `docs/` folder contains step-by-step chapters building Linkly from scratch:
+
+1. Foundations — Worker, functions, triggers, HTTP
+2. Observe everything — Console, logs, traces
+3. Persist everything — SQLite, cache-ahead reads
+4. Make it durable — Queues, pub/sub, reactive state
+5. Stream live clicks — iii-stream, click-streamer worker
+6. Move bulk data with channels — CSV import
+7. Bring in the browser — Browser as a worker (Vite)
+8. Go full-stack with Next.js — This Turborepo architecture
